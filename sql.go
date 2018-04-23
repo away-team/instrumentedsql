@@ -3,51 +3,50 @@ package instrumentedsql
 import (
 	"context"
 	"database/sql/driver"
-	"fmt"
 
-	"github.com/kr/pretty"
+	svcDB "github.com/healthimation/go-service/database"
 	"github.com/pkg/errors"
 )
 
 type wrappedDriver struct {
-	Logger
-	Tracer
-	parent driver.Driver
+	logger       Logger
+	instrumenter svcDB.DBInstrumentTimer
+	parent       driver.Driver
 }
 
 type wrappedConn struct {
-	Logger
-	Tracer
-	parent driver.Conn
+	logger       Logger
+	instrumenter svcDB.DBInstrumentTimer
+	parent       driver.Conn
 }
 
 type wrappedTx struct {
-	Logger
-	Tracer
-	ctx    context.Context
-	parent driver.Tx
+	logger       Logger
+	instrumenter svcDB.DBInstrumentTimer
+	ctx          context.Context
+	parent       driver.Tx
 }
 
 type wrappedStmt struct {
-	Logger
-	Tracer
-	ctx    context.Context
-	query  string
-	parent driver.Stmt
+	logger       Logger
+	instrumenter svcDB.DBInstrumentTimer
+	ctx          context.Context
+	query        string
+	parent       driver.Stmt
 }
 
 type wrappedResult struct {
-	Logger
-	Tracer
-	ctx    context.Context
-	parent driver.Result
+	logger       Logger
+	instrumenter svcDB.DBInstrumentTimer
+	ctx          context.Context
+	parent       driver.Result
 }
 
 type wrappedRows struct {
-	Logger
-	Tracer
-	ctx    context.Context
-	parent driver.Rows
+	logger       Logger
+	instrumenter svcDB.DBInstrumentTimer
+	ctx          context.Context
+	parent       driver.Rows
 }
 
 // WrapDriver will wrap the passed SQL driver and return a new sql driver that uses it and also logs and traces calls using the passed logger and tracer
@@ -63,11 +62,11 @@ func WrapDriver(driver driver.Driver, opts ...Opt) driver.Driver {
 		opt(&d)
 	}
 
-	if d.Logger == nil {
-		d.Logger = nullLogger{}
+	if d.logger == nil {
+		d.logger = nullLogger{}
 	}
-	if d.Tracer == nil {
-		d.Tracer = nullTracer{}
+	if d.instrumenter == nil {
+		d.instrumenter = nullInstrumenter{}
 	}
 
 	return d
@@ -79,7 +78,7 @@ func (d wrappedDriver) Open(name string) (driver.Conn, error) {
 		return nil, err
 	}
 
-	return wrappedConn{Tracer: d.Tracer, Logger: d.Logger, parent: conn}, nil
+	return wrappedConn{instrumenter: d.instrumenter, logger: d.logger, parent: conn}, nil
 }
 
 func (c wrappedConn) Prepare(query string) (driver.Stmt, error) {
@@ -88,7 +87,7 @@ func (c wrappedConn) Prepare(query string) (driver.Stmt, error) {
 		return nil, err
 	}
 
-	return wrappedStmt{Tracer: c.Tracer, Logger: c.Logger, query: query, parent: parent}, nil
+	return wrappedStmt{instrumenter: c.instrumenter, logger: c.logger, query: query, parent: parent}, nil
 }
 
 func (c wrappedConn) Close() error {
@@ -101,16 +100,13 @@ func (c wrappedConn) Begin() (driver.Tx, error) {
 		return nil, err
 	}
 
-	return wrappedTx{Tracer: c.Tracer, Logger: c.Logger, parent: tx}, nil
+	return wrappedTx{instrumenter: c.instrumenter, logger: c.logger, parent: tx}, nil
 }
 
 func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx driver.Tx, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-tx-begin")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(ctx, "", "sql-tx-begin", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		c.Log(ctx, "sql-tx-begin", "err", err)
+		timer.End()
 	}()
 
 	if connBeginTx, ok := c.parent.(driver.ConnBeginTx); ok {
@@ -119,7 +115,7 @@ func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx dri
 			return nil, err
 		}
 
-		return wrappedTx{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: tx}, nil
+		return wrappedTx{instrumenter: c.instrumenter, logger: c.logger, ctx: ctx, parent: tx}, nil
 	}
 
 	tx, err = c.parent.Begin()
@@ -127,16 +123,13 @@ func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx dri
 		return nil, err
 	}
 
-	return wrappedTx{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: tx}, nil
+	return wrappedTx{instrumenter: c.instrumenter, logger: c.logger, ctx: ctx, parent: tx}, nil
 }
 
 func (c wrappedConn) PrepareContext(ctx context.Context, query string) (stmt driver.Stmt, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-prepare")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(ctx, "", "sql-prepare", query)
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		c.Log(ctx, "sql-prepare", "err", err)
+		timer.End()
 	}()
 
 	if connPrepareCtx, ok := c.parent.(driver.ConnPrepareContext); ok {
@@ -145,7 +138,7 @@ func (c wrappedConn) PrepareContext(ctx context.Context, query string) (stmt dri
 			return nil, err
 		}
 
-		return wrappedStmt{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: stmt}, nil
+		return wrappedStmt{instrumenter: c.instrumenter, logger: c.logger, ctx: ctx, parent: stmt}, nil
 	}
 
 	return c.Prepare(query)
@@ -158,21 +151,16 @@ func (c wrappedConn) Exec(query string, args []driver.Value) (driver.Result, err
 			return nil, err
 		}
 
-		return wrappedResult{Tracer: c.Tracer, Logger: c.Logger, parent: res}, nil
+		return wrappedResult{instrumenter: c.instrumenter, logger: c.logger, parent: res}, nil
 	}
 
 	return nil, driver.ErrSkip
 }
 
 func (c wrappedConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (r driver.Result, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-conn-exec")
-	span.SetLabel("component", "database/sql")
-	span.SetLabel("query", query)
-	span.SetLabel("args", pretty.Sprint(args))
+	timer := svcDB.StartDBTimer(ctx, "", "sql-conn-exec", query)
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		c.Log(ctx, "sql-conn-exec", "query", query, "args", pretty.Sprint(args), "err", err)
+		timer.End()
 	}()
 
 	if execContext, ok := c.parent.(driver.ExecerContext); ok {
@@ -181,7 +169,7 @@ func (c wrappedConn) ExecContext(ctx context.Context, query string, args []drive
 			return nil, err
 		}
 
-		return wrappedResult{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: res}, nil
+		return wrappedResult{instrumenter: c.instrumenter, logger: c.logger, ctx: ctx, parent: res}, nil
 	}
 
 	// Fallback implementation
@@ -201,18 +189,13 @@ func (c wrappedConn) ExecContext(ctx context.Context, query string, args []drive
 
 func (c wrappedConn) Ping(ctx context.Context) (err error) {
 	if pinger, ok := c.parent.(driver.Pinger); ok {
-		span := c.GetSpan(ctx).NewChild("sql-ping")
-		span.SetLabel("component", "database/sql")
+		timer := svcDB.StartDBTimer(ctx, "", "sql-ping", "")
 		defer func() {
-			span.SetLabel("err", fmt.Sprint(err))
-			span.Finish()
-			c.Log(ctx, "sql-ping", "err", err)
+			timer.End()
 		}()
 
 		return pinger.Ping(ctx)
 	}
-
-	c.Log(ctx, "sql-dummy-ping")
 
 	return nil
 }
@@ -224,21 +207,16 @@ func (c wrappedConn) Query(query string, args []driver.Value) (driver.Rows, erro
 			return nil, err
 		}
 
-		return wrappedRows{Tracer: c.Tracer, Logger: c.Logger, parent: rows}, nil
+		return wrappedRows{instrumenter: c.instrumenter, logger: c.logger, parent: rows}, nil
 	}
 
 	return nil, driver.ErrSkip
 }
 
 func (c wrappedConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (rows driver.Rows, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-conn-query")
-	span.SetLabel("component", "database/sql")
-	span.SetLabel("query", query)
-	span.SetLabel("args", pretty.Sprint(args))
+	timer := svcDB.StartDBTimer(ctx, "", "sql-conn-query", query)
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		c.Log(ctx, "sql-conn-query", "query", query, "args", pretty.Sprint(args), "err", err)
+		timer.End()
 	}()
 
 	if queryerContext, ok := c.parent.(driver.QueryerContext); ok {
@@ -247,7 +225,7 @@ func (c wrappedConn) QueryContext(ctx context.Context, query string, args []driv
 			return nil, err
 		}
 
-		return wrappedRows{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: rows}, nil
+		return wrappedRows{instrumenter: c.instrumenter, logger: c.logger, ctx: ctx, parent: rows}, nil
 	}
 
 	dargs, err := namedValueToValue(args)
@@ -265,36 +243,27 @@ func (c wrappedConn) QueryContext(ctx context.Context, query string, args []driv
 }
 
 func (t wrappedTx) Commit() (err error) {
-	span := t.GetSpan(t.ctx).NewChild("sql-tx-commit")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(t.ctx, "", "sql-tx-commit", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		t.Log(t.ctx, "sql-tx-commit", "err", err)
+		timer.End()
 	}()
 
 	return t.parent.Commit()
 }
 
 func (t wrappedTx) Rollback() (err error) {
-	span := t.GetSpan(t.ctx).NewChild("sql-tx-rollback")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(t.ctx, "", "sql-tx-rollback", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		t.Log(t.ctx, "sql-tx-rollback", "err", err)
+		timer.End()
 	}()
 
 	return t.parent.Rollback()
 }
 
 func (s wrappedStmt) Close() (err error) {
-	span := s.GetSpan(s.ctx).NewChild("sql-stmt-close")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(s.ctx, "", "sql-stmt-close", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		s.Log(s.ctx, "sql-stmt-close", "err", err)
+		timer.End()
 	}()
 
 	return s.parent.Close()
@@ -305,14 +274,9 @@ func (s wrappedStmt) NumInput() int {
 }
 
 func (s wrappedStmt) Exec(args []driver.Value) (res driver.Result, err error) {
-	span := s.GetSpan(s.ctx).NewChild("sql-stmt-exec")
-	span.SetLabel("component", "database/sql")
-	span.SetLabel("query", s.query)
-	span.SetLabel("args", pretty.Sprint(args))
+	timer := svcDB.StartDBTimer(s.ctx, "", "sql-stmt-exec", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		s.Log(s.ctx, "sql-stmt-exec", "query", s.query, "args", pretty.Sprint(args), "err", err)
+		timer.End()
 	}()
 
 	res, err = s.parent.Exec(args)
@@ -320,18 +284,13 @@ func (s wrappedStmt) Exec(args []driver.Value) (res driver.Result, err error) {
 		return nil, err
 	}
 
-	return wrappedResult{Tracer: s.Tracer, Logger: s.Logger, ctx: s.ctx, parent: res}, nil
+	return wrappedResult{instrumenter: s.instrumenter, logger: s.logger, ctx: s.ctx, parent: res}, nil
 }
 
 func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
-	span := s.GetSpan(s.ctx).NewChild("sql-stmt-query")
-	span.SetLabel("component", "database/sql")
-	span.SetLabel("query", s.query)
-	span.SetLabel("args", pretty.Sprint(args))
+	timer := svcDB.StartDBTimer(s.ctx, "", "sql-stmt-query", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		s.Log(s.ctx, "sql-stmt-query", "query", s.query, "args", pretty.Sprint(args), "err", err)
+		timer.End()
 	}()
 
 	rows, err = s.parent.Query(args)
@@ -339,18 +298,13 @@ func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
 		return nil, err
 	}
 
-	return wrappedRows{Tracer: s.Tracer, Logger: s.Logger, ctx: s.ctx, parent: rows}, nil
+	return wrappedRows{instrumenter: s.instrumenter, logger: s.logger, ctx: s.ctx, parent: rows}, nil
 }
 
 func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (res driver.Result, err error) {
-	span := s.GetSpan(ctx).NewChild("sql-stmt-exec")
-	span.SetLabel("component", "database/sql")
-	span.SetLabel("query", s.query)
-	span.SetLabel("args", pretty.Sprint(args))
+	timer := svcDB.StartDBTimer(s.ctx, "", "sql-stmt-exec", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		s.Log(ctx, "sql-stmt-exec", "query", s.query, "args", pretty.Sprint(args), "err", err)
+		timer.End()
 	}()
 
 	if stmtExecContext, ok := s.parent.(driver.StmtExecContext); ok {
@@ -359,7 +313,7 @@ func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			return nil, err
 		}
 
-		return wrappedResult{Tracer: s.Tracer, Logger: s.Logger, ctx: ctx, parent: res}, nil
+		return wrappedResult{instrumenter: s.instrumenter, logger: s.logger, ctx: ctx, parent: res}, nil
 	}
 
 	// Fallback implementation
@@ -378,14 +332,9 @@ func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 }
 
 func (s wrappedStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (rows driver.Rows, err error) {
-	span := s.GetSpan(ctx).NewChild("sql-stmt-query")
-	span.SetLabel("component", "database/sql")
-	span.SetLabel("query", s.query)
-	span.SetLabel("args", pretty.Sprint(args))
+	timer := svcDB.StartDBTimer(s.ctx, "", "sql-stmt-query", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		s.Log(ctx, "sql-stmt-query", "query", s.query, "args", pretty.Sprint(args), "err", err)
+		timer.End()
 	}()
 
 	if stmtQueryContext, ok := s.parent.(driver.StmtQueryContext); ok {
@@ -394,7 +343,7 @@ func (s wrappedStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 			return nil, err
 		}
 
-		return wrappedRows{Tracer: s.Tracer, Logger: s.Logger, ctx: ctx, parent: rows}, nil
+		return wrappedRows{instrumenter: s.instrumenter, logger: s.logger, ctx: ctx, parent: rows}, nil
 	}
 
 	dargs, err := namedValueToValue(args)
@@ -412,24 +361,18 @@ func (s wrappedStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 }
 
 func (r wrappedResult) LastInsertId() (id int64, err error) {
-	span := r.GetSpan(r.ctx).NewChild("sql-res-lastInsertId")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(r.ctx, "", "sql-res-lastInsertId", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		r.Log(r.ctx, "sql-res-lastInsertId", "err", err)
+		timer.End()
 	}()
 
 	return r.parent.LastInsertId()
 }
 
 func (r wrappedResult) RowsAffected() (num int64, err error) {
-	span := r.GetSpan(r.ctx).NewChild("sql-res-rowsAffected")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(r.ctx, "", "sql-res-rowsAffected", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		r.Log(r.ctx, "sql-res-rowsAffected", "err", err)
+		timer.End()
 	}()
 
 	return r.parent.RowsAffected()
@@ -444,12 +387,9 @@ func (r wrappedRows) Close() error {
 }
 
 func (r wrappedRows) Next(dest []driver.Value) (err error) {
-	span := r.GetSpan(r.ctx).NewChild("sql-rows-next")
-	span.SetLabel("component", "database/sql")
+	timer := svcDB.StartDBTimer(r.ctx, "", "sql-rows-next", "")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
-		span.Finish()
-		r.Log(r.ctx, "sql-rows-next", "err", err)
+		timer.End()
 	}()
 
 	return r.parent.Next(dest)
