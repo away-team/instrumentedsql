@@ -7,30 +7,32 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+
+	"github.com/away-team/go-tracer/tracer"
 )
 
 type wrappedDriver struct {
 	Logger
-	Tracer
+	tracer.Tracer
 	parent driver.Driver
 }
 
 type wrappedConn struct {
 	Logger
-	Tracer
+	tracer.Tracer
 	parent driver.Conn
 }
 
 type wrappedTx struct {
 	Logger
-	Tracer
+	tracer.Tracer
 	ctx    context.Context
 	parent driver.Tx
 }
 
 type wrappedStmt struct {
 	Logger
-	Tracer
+	tracer.Tracer
 	ctx    context.Context
 	query  string
 	parent driver.Stmt
@@ -38,14 +40,14 @@ type wrappedStmt struct {
 
 type wrappedResult struct {
 	Logger
-	Tracer
+	tracer.Tracer
 	ctx    context.Context
 	parent driver.Result
 }
 
 type wrappedRows struct {
 	Logger
-	Tracer
+	tracer.Tracer
 	ctx    context.Context
 	parent driver.Rows
 }
@@ -67,7 +69,7 @@ func WrapDriver(driver driver.Driver, opts ...Opt) driver.Driver {
 		d.Logger = nullLogger{}
 	}
 	if d.Tracer == nil {
-		d.Tracer = nullTracer{}
+		d.Tracer = tracer.NewNullTracer()
 	}
 
 	return d
@@ -131,7 +133,7 @@ func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx dri
 }
 
 func (c wrappedConn) PrepareContext(ctx context.Context, query string) (stmt driver.Stmt, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-prepare")
+	span := c.GetSpan(ctx).NewChild(fmt.Sprintf("(sql-prepare) %s", query))
 	span.SetLabel("component", "database/sql")
 	defer func() {
 		span.SetLabel("err", fmt.Sprint(err))
@@ -165,7 +167,7 @@ func (c wrappedConn) Exec(query string, args []driver.Value) (driver.Result, err
 }
 
 func (c wrappedConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (r driver.Result, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-conn-exec")
+	span := c.GetSpan(ctx).NewChild(fmt.Sprintf("(sql-conn-exec) %s", query))
 	span.SetLabel("component", "database/sql")
 	span.SetLabel("query", query)
 	span.SetLabel("args", pretty.Sprint(args))
@@ -231,7 +233,7 @@ func (c wrappedConn) Query(query string, args []driver.Value) (driver.Rows, erro
 }
 
 func (c wrappedConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (rows driver.Rows, err error) {
-	span := c.GetSpan(ctx).NewChild("sql-conn-query")
+	span := c.GetSpan(ctx).NewChild(fmt.Sprintf("(sql-conn-query), %s", query))
 	span.SetLabel("component", "database/sql")
 	span.SetLabel("query", query)
 	span.SetLabel("args", pretty.Sprint(args))
@@ -305,7 +307,7 @@ func (s wrappedStmt) NumInput() int {
 }
 
 func (s wrappedStmt) Exec(args []driver.Value) (res driver.Result, err error) {
-	span := s.GetSpan(s.ctx).NewChild("sql-stmt-exec")
+	span := s.GetSpan(s.ctx).NewChild(fmt.Sprintf("(sql-stmt-exec) %s", s.query))
 	span.SetLabel("component", "database/sql")
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
@@ -324,7 +326,7 @@ func (s wrappedStmt) Exec(args []driver.Value) (res driver.Result, err error) {
 }
 
 func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
-	span := s.GetSpan(s.ctx).NewChild("sql-stmt-query")
+	span := s.GetSpan(s.ctx).NewChild(fmt.Sprintf("(sql-stmt-query) %s", s.query))
 	span.SetLabel("component", "database/sql")
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
@@ -343,7 +345,7 @@ func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
 }
 
 func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (res driver.Result, err error) {
-	span := s.GetSpan(ctx).NewChild("sql-stmt-exec")
+	span := s.GetSpan(ctx).NewChild(fmt.Sprintf("(sql-stmt-exec) %s", s.query))
 	span.SetLabel("component", "database/sql")
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
@@ -378,7 +380,7 @@ func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 }
 
 func (s wrappedStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (rows driver.Rows, err error) {
-	span := s.GetSpan(ctx).NewChild("sql-stmt-query")
+	span := s.GetSpan(ctx).NewChild(fmt.Sprintf("(sql-stmt-query) %s", s.query))
 	span.SetLabel("component", "database/sql")
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
