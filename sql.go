@@ -474,16 +474,6 @@ func (r wrappedRows) Close() error {
 }
 
 func (r wrappedRows) Next(dest []driver.Value) (err error) {
-	span := r.GetSpan(r.ctx).NewChild("sql-rows-next")
-	span.SetLabel("component", "database/sql")
-	defer func() {
-		if err != nil {
-			span.SetLabel("err", fmt.Sprint(err))
-		}
-		span.Finish()
-		r.Log(r.ctx, "sql-rows-next", "err", err)
-	}()
-
 	return r.parent.Next(dest)
 }
 
