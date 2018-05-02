@@ -110,7 +110,9 @@ func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx dri
 	span := c.GetSpan(ctx).NewChild("sql-tx-begin")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		c.Log(ctx, "sql-tx-begin", "err", err)
 	}()
@@ -136,7 +138,9 @@ func (c wrappedConn) PrepareContext(ctx context.Context, query string) (stmt dri
 	span := c.GetSpan(ctx).NewChild(fmt.Sprintf("(sql-prepare) %s", query))
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		c.Log(ctx, "sql-prepare", "err", err)
 	}()
@@ -172,7 +176,9 @@ func (c wrappedConn) ExecContext(ctx context.Context, query string, args []drive
 	span.SetLabel("query", query)
 	span.SetLabel("args", pretty.Sprint(args))
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		c.Log(ctx, "sql-conn-exec", "query", query, "args", pretty.Sprint(args), "err", err)
 	}()
@@ -206,7 +212,9 @@ func (c wrappedConn) Ping(ctx context.Context) (err error) {
 		span := c.GetSpan(ctx).NewChild("sql-ping")
 		span.SetLabel("component", "database/sql")
 		defer func() {
-			span.SetLabel("err", fmt.Sprint(err))
+			if err != nil {
+				span.SetLabel("err", fmt.Sprint(err))
+			}
 			span.Finish()
 			c.Log(ctx, "sql-ping", "err", err)
 		}()
@@ -238,7 +246,9 @@ func (c wrappedConn) QueryContext(ctx context.Context, query string, args []driv
 	span.SetLabel("query", query)
 	span.SetLabel("args", pretty.Sprint(args))
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		c.Log(ctx, "sql-conn-query", "query", query, "args", pretty.Sprint(args), "err", err)
 	}()
@@ -270,7 +280,9 @@ func (t wrappedTx) Commit() (err error) {
 	span := t.GetSpan(t.ctx).NewChild("sql-tx-commit")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		t.Log(t.ctx, "sql-tx-commit", "err", err)
 	}()
@@ -282,7 +294,9 @@ func (t wrappedTx) Rollback() (err error) {
 	span := t.GetSpan(t.ctx).NewChild("sql-tx-rollback")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		t.Log(t.ctx, "sql-tx-rollback", "err", err)
 	}()
@@ -294,7 +308,9 @@ func (s wrappedStmt) Close() (err error) {
 	span := s.GetSpan(s.ctx).NewChild("sql-stmt-close")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		s.Log(s.ctx, "sql-stmt-close", "err", err)
 	}()
@@ -312,7 +328,9 @@ func (s wrappedStmt) Exec(args []driver.Value) (res driver.Result, err error) {
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		s.Log(s.ctx, "sql-stmt-exec", "query", s.query, "args", pretty.Sprint(args), "err", err)
 	}()
@@ -331,7 +349,9 @@ func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		s.Log(s.ctx, "sql-stmt-query", "query", s.query, "args", pretty.Sprint(args), "err", err)
 	}()
@@ -350,7 +370,9 @@ func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		s.Log(ctx, "sql-stmt-exec", "query", s.query, "args", pretty.Sprint(args), "err", err)
 	}()
@@ -385,7 +407,9 @@ func (s wrappedStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 	span.SetLabel("query", s.query)
 	span.SetLabel("args", pretty.Sprint(args))
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		s.Log(ctx, "sql-stmt-query", "query", s.query, "args", pretty.Sprint(args), "err", err)
 	}()
@@ -417,7 +441,9 @@ func (r wrappedResult) LastInsertId() (id int64, err error) {
 	span := r.GetSpan(r.ctx).NewChild("sql-res-lastInsertId")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		r.Log(r.ctx, "sql-res-lastInsertId", "err", err)
 	}()
@@ -429,7 +455,9 @@ func (r wrappedResult) RowsAffected() (num int64, err error) {
 	span := r.GetSpan(r.ctx).NewChild("sql-res-rowsAffected")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		r.Log(r.ctx, "sql-res-rowsAffected", "err", err)
 	}()
@@ -449,7 +477,9 @@ func (r wrappedRows) Next(dest []driver.Value) (err error) {
 	span := r.GetSpan(r.ctx).NewChild("sql-rows-next")
 	span.SetLabel("component", "database/sql")
 	defer func() {
-		span.SetLabel("err", fmt.Sprint(err))
+		if err != nil {
+			span.SetLabel("err", fmt.Sprint(err))
+		}
 		span.Finish()
 		r.Log(r.ctx, "sql-rows-next", "err", err)
 	}()
