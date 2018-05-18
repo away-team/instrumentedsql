@@ -13,8 +13,8 @@ func WithLogger(l Logger) Opt {
 }
 
 // WithTracer sets the tracer of the wrapped driver to the provided tracer
-func WithTracer(t tracer.Tracer) Opt {
+func WithTracer(t tracer.DatastoreTracer) Opt {
 	return func(w *wrappedDriver) {
-		w.Tracer = t
+		w.DatastoreTracer = t
 	}
 }
