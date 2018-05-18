@@ -13,26 +13,26 @@ import (
 
 type wrappedDriver struct {
 	Logger
-	Tracer tracer.DatastoreTracer
+	tracer.DatastoreTracer
 	parent driver.Driver
 }
 
 type wrappedConn struct {
 	Logger
-	Tracer tracer.DatastoreTracer
+	tracer.DatastoreTracer
 	parent driver.Conn
 }
 
 type wrappedTx struct {
 	Logger
-	Tracer tracer.DatastoreTracer
+	tracer.DatastoreTracer
 	ctx    context.Context
 	parent driver.Tx
 }
 
 type wrappedStmt struct {
 	Logger
-	Tracer tracer.DatastoreTracer
+	tracer.DatastoreTracer
 	ctx    context.Context
 	query  string
 	parent driver.Stmt
@@ -40,14 +40,14 @@ type wrappedStmt struct {
 
 type wrappedResult struct {
 	Logger
-	Tracer tracer.DatastoreTracer
+	tracer.DatastoreTracer
 	ctx    context.Context
 	parent driver.Result
 }
 
 type wrappedRows struct {
 	Logger
-	Tracer tracer.DatastoreTracer
+	tracer.DatastoreTracer
 	ctx    context.Context
 	parent driver.Rows
 }
@@ -68,8 +68,8 @@ func WrapDriver(driver driver.Driver, opts ...Opt) driver.Driver {
 	if d.Logger == nil {
 		d.Logger = nullLogger{}
 	}
-	if d.Tracer == nil {
-		d.Tracer = tracer.NewNullDatastoreTracer()
+	if d.DatastoreTracer == nil {
+		d.DatastoreTracer = tracer.NewNullDatastoreTracer()
 	}
 
 	return d
@@ -81,7 +81,7 @@ func (d wrappedDriver) Open(name string) (driver.Conn, error) {
 		return nil, err
 	}
 
-	return wrappedConn{Tracer: d.Tracer, Logger: d.Logger, parent: conn}, nil
+	return wrappedConn{DatastoreTracer: d.DatastoreTracer, Logger: d.Logger, parent: conn}, nil
 }
 
 func (c wrappedConn) Prepare(query string) (driver.Stmt, error) {
@@ -90,7 +90,7 @@ func (c wrappedConn) Prepare(query string) (driver.Stmt, error) {
 		return nil, err
 	}
 
-	return wrappedStmt{Tracer: c.Tracer, Logger: c.Logger, query: query, parent: parent}, nil
+	return wrappedStmt{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, query: query, parent: parent}, nil
 }
 
 func (c wrappedConn) Close() error {
@@ -103,7 +103,7 @@ func (c wrappedConn) Begin() (driver.Tx, error) {
 		return nil, err
 	}
 
-	return wrappedTx{Tracer: c.Tracer, Logger: c.Logger, parent: tx}, nil
+	return wrappedTx{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, parent: tx}, nil
 }
 
 func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx driver.Tx, err error) {
@@ -123,7 +123,7 @@ func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx dri
 			return nil, err
 		}
 
-		return wrappedTx{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: tx}, nil
+		return wrappedTx{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, ctx: ctx, parent: tx}, nil
 	}
 
 	tx, err = c.parent.Begin()
@@ -131,7 +131,7 @@ func (c wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (tx dri
 		return nil, err
 	}
 
-	return wrappedTx{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: tx}, nil
+	return wrappedTx{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, ctx: ctx, parent: tx}, nil
 }
 
 func (c wrappedConn) PrepareContext(ctx context.Context, query string) (stmt driver.Stmt, err error) {
@@ -151,7 +151,7 @@ func (c wrappedConn) PrepareContext(ctx context.Context, query string) (stmt dri
 			return nil, err
 		}
 
-		return wrappedStmt{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: stmt}, nil
+		return wrappedStmt{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, ctx: ctx, parent: stmt}, nil
 	}
 
 	return c.Prepare(query)
@@ -164,7 +164,7 @@ func (c wrappedConn) Exec(query string, args []driver.Value) (driver.Result, err
 			return nil, err
 		}
 
-		return wrappedResult{Tracer: c.Tracer, Logger: c.Logger, parent: res}, nil
+		return wrappedResult{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, parent: res}, nil
 	}
 
 	return nil, driver.ErrSkip
@@ -189,7 +189,7 @@ func (c wrappedConn) ExecContext(ctx context.Context, query string, args []drive
 			return nil, err
 		}
 
-		return wrappedResult{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: res}, nil
+		return wrappedResult{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, ctx: ctx, parent: res}, nil
 	}
 
 	// Fallback implementation
@@ -234,7 +234,7 @@ func (c wrappedConn) Query(query string, args []driver.Value) (driver.Rows, erro
 			return nil, err
 		}
 
-		return wrappedRows{Tracer: c.Tracer, Logger: c.Logger, parent: rows}, nil
+		return wrappedRows{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, parent: rows}, nil
 	}
 
 	return nil, driver.ErrSkip
@@ -259,7 +259,7 @@ func (c wrappedConn) QueryContext(ctx context.Context, query string, args []driv
 			return nil, err
 		}
 
-		return wrappedRows{Tracer: c.Tracer, Logger: c.Logger, ctx: ctx, parent: rows}, nil
+		return wrappedRows{DatastoreTracer: c.DatastoreTracer, Logger: c.Logger, ctx: ctx, parent: rows}, nil
 	}
 
 	dargs, err := namedValueToValue(args)
@@ -340,7 +340,7 @@ func (s wrappedStmt) Exec(args []driver.Value) (res driver.Result, err error) {
 		return nil, err
 	}
 
-	return wrappedResult{Tracer: s.Tracer, Logger: s.Logger, ctx: s.ctx, parent: res}, nil
+	return wrappedResult{DatastoreTracer: s.DatastoreTracer, Logger: s.Logger, ctx: s.ctx, parent: res}, nil
 }
 
 func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
@@ -361,7 +361,7 @@ func (s wrappedStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
 		return nil, err
 	}
 
-	return wrappedRows{Tracer: s.Tracer, Logger: s.Logger, ctx: s.ctx, parent: rows}, nil
+	return wrappedRows{DatastoreTracer: s.DatastoreTracer, Logger: s.Logger, ctx: s.ctx, parent: rows}, nil
 }
 
 func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (res driver.Result, err error) {
@@ -383,7 +383,7 @@ func (s wrappedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			return nil, err
 		}
 
-		return wrappedResult{Tracer: s.Tracer, Logger: s.Logger, ctx: ctx, parent: res}, nil
+		return wrappedResult{DatastoreTracer: s.DatastoreTracer, Logger: s.Logger, ctx: ctx, parent: res}, nil
 	}
 
 	// Fallback implementation
@@ -420,7 +420,7 @@ func (s wrappedStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 			return nil, err
 		}
 
-		return wrappedRows{Tracer: s.Tracer, Logger: s.Logger, ctx: ctx, parent: rows}, nil
+		return wrappedRows{DatastoreTracer: s.DatastoreTracer, Logger: s.Logger, ctx: ctx, parent: rows}, nil
 	}
 
 	dargs, err := namedValueToValue(args)
