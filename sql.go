@@ -13,26 +13,26 @@ import (
 
 type wrappedDriver struct {
 	Logger
-	tracer.Tracer
+	Tracer tracer.DatastoreTracer
 	parent driver.Driver
 }
 
 type wrappedConn struct {
 	Logger
-	tracer.Tracer
+	Tracer tracer.DatastoreTracer
 	parent driver.Conn
 }
 
 type wrappedTx struct {
 	Logger
-	tracer.Tracer
+	Tracer tracer.DatastoreTracer
 	ctx    context.Context
 	parent driver.Tx
 }
 
 type wrappedStmt struct {
 	Logger
-	tracer.Tracer
+	Tracer tracer.DatastoreTracer
 	ctx    context.Context
 	query  string
 	parent driver.Stmt
@@ -40,14 +40,14 @@ type wrappedStmt struct {
 
 type wrappedResult struct {
 	Logger
-	tracer.Tracer
+	Tracer tracer.DatastoreTracer
 	ctx    context.Context
 	parent driver.Result
 }
 
 type wrappedRows struct {
 	Logger
-	tracer.Tracer
+	Tracer tracer.DatastoreTracer
 	ctx    context.Context
 	parent driver.Rows
 }
@@ -69,7 +69,7 @@ func WrapDriver(driver driver.Driver, opts ...Opt) driver.Driver {
 		d.Logger = nullLogger{}
 	}
 	if d.Tracer == nil {
-		d.Tracer = tracer.NewNullTracer()
+		d.Tracer = tracer.NewNullDatastoreTracer()
 	}
 
 	return d
